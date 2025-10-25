@@ -63,9 +63,47 @@ def create_app(config_file='config.json'):
 
     app.qwen_image_client = QwenImageClient()
 
+    # Initialize Plugin Manager
+    from plugins.plugin_system import PluginManager
+    plugin_dir = config_manager.get('plugins.directory', 'plugins')
+    app.plugin_manager = PluginManager(plugin_dir)
+
+    # Discover and load plugins
+    discovered = app.plugin_manager.discover_plugins()
+    print(f"✓ Discovered {len(discovered)} plugins")
+
+    for plugin_name in discovered:
+        app.plugin_manager.load_plugin(plugin_name, app)
+
+    # Enable configured plugins
+    enabled_plugins = config_manager.get('plugins.enabled', [])
+    for plugin_name in enabled_plugins:
+        app.plugin_manager.enable_plugin(plugin_name)
+
+    # Register plugin routes
+    for plugin_name, plugin in app.plugin_manager.plugins.items():
+        if plugin.enabled:
+            routes = plugin.get_routes()
+            for route in routes:
+                app.add_url_rule(
+                    route['rule'],
+                    endpoint=route['endpoint'],
+                    view_func=route['view_func'],
+                    methods=route.get('methods', ['GET'])
+                )
+
     # Register blueprints
     from routes.sessions import sessions_bp
+    from routes.mcp import mcp_bp
+    from routes.autogen import autogen_bp
+    from routes.plugins import plugins_bp
+
     app.register_blueprint(sessions_bp)
+    app.register_blueprint(mcp_bp)
+    app.register_blueprint(autogen_bp)
+    app.register_blueprint(plugins_bp)
+
+    print("✓ All blueprints registered")
 
     # Import and register legacy routes
     register_legacy_routes(app)

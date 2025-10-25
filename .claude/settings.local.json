@@ -14,7 +14,9 @@
       "Bash(pip install:*)",
       "Bash(pip uninstall:*)",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
