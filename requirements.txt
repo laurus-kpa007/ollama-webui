@@ -1,5 +1,33 @@
+# Web framework
 Flask==2.3.3
 Flask-CORS==4.0.0
+Flask-SQLAlchemy==3.0.5
 requests==2.31.0
 Pillow==10.0.1
 python-dotenv==1.0.0
+
+# Database
+redis==5.0.1
+
+# MCP Integration
+mcp==0.9.0
+
+# AutoGen (Multi-agent framework)
+pyautogen==0.2.25
+
+# Utilities
+pydantic==2.5.0
+
+# Core ML libraries (install PyTorch separately with CUDA)
+# torch - install separately: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# torchvision - install with torch
+# torchaudio - install with torch
+
+# Image generation dependencies
+diffusers>=0.24.0
+transformers>=4.36.0
+accelerate>=0.24.0
+safetensors>=0.4.0
+
+# Performance optimization (install after PyTorch)
+# xformers - install separately: pip install xformers

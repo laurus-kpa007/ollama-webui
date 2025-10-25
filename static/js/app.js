@@ -62,26 +62,79 @@ class OllamaChat {
 
     async loadSdModels() {
         try {
-            const response = await fetch('/api/sd_models');
+            const response = await fetch('/api/image_models');
             const data = await response.json();
             
             const sdModelSelect = document.getElementById('sdModelSelect');
             sdModelSelect.innerHTML = '<option value="">모델을 선택하세요...</option>';
             
-            if (data.connected && data.data && data.data.length > 0) {
-                this.sdConnected = true;
+            // Qwen 직접 구현 사용 가능 여부 표시
+            this.qwenDirectAvailable = data.qwen_direct_available || false;
+            this.sdConnected = data.comfyui_connected || false;
+            
+            if (data.data && data.data.length > 0) {
                 data.data.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.model_name;
-                    option.textContent = model.model_name;
+                    
+                    // 모델 타입에 따른 표시 및 활성화 상태
+                    let displayText = model.title;
+                    if (model.type === 'direct') {
+                        displayText += model.available ? ' ✅' : ' ❌ (라이브러리 설치 필요)';
+                        option.disabled = !model.available;
+                    } else if (model.type === 'comfyui') {
+                        displayText += this.sdConnected ? 
+                            (model.available ? ' ✅' : ' ❌ (모델 설치 필요)') : 
+                            ' ❌ (ComfyUI 연결 필요)';
+                        option.disabled = !this.sdConnected || !model.available;
+                    }
+                    
+                    if (model.description) {
+                        option.title = model.description;
+                    }
+                    
+                    option.textContent = displayText;
+                    option.dataset.type = model.type || 'comfyui';
+                    option.dataset.available = model.available;
+                    
                     sdModelSelect.appendChild(option);
                 });
-            } else {
-                this.sdConnected = false;
+                
+                // 기본값으로 Qwen 직접 구현 선택 (사용 가능한 경우)
+                if (this.qwenDirectAvailable) {
+                    sdModelSelect.value = 'qwen-direct';
+                    this.currentSdModel = 'qwen-direct';
+                }
             }
+            
+            // 연결 상태 업데이트
+            this.updateImageConnectionStatus(data);
+            
         } catch (error) {
-            console.error('SD 모델 로드 실패:', error);
+            console.error('이미지 모델 로드 실패:', error);
             this.sdConnected = false;
+            this.qwenDirectAvailable = false;
+            this.updateImageConnectionStatus(null);
+        }
+        
+        // 버튼 상태 업데이트
+        this.updateSendButton();
+    }
+
+    updateImageConnectionStatus(data) {
+        const statusElement = document.getElementById('imageConnectionStatus');
+        if (!statusElement) return;
+        
+        if (data) {
+            if (data.qwen_direct_available) {
+                statusElement.innerHTML = '<span class="badge bg-success">Qwen 직접 구현 ✅</span>';
+            } else if (data.comfyui_connected) {
+                statusElement.innerHTML = '<span class="badge bg-info">ComfyUI 연결됨</span>';
+            } else {
+                statusElement.innerHTML = '<span class="badge bg-warning">모델 설치 필요</span>';
+            }
+        } else {
+            statusElement.innerHTML = '<span class="badge bg-danger">연결 실패</span>';
         }
     }
 
@@ -134,10 +187,15 @@ class OllamaChat {
                 shouldEnable = hasMessage && this.currentModel;
                 break;
             case 'image_gen':
-                shouldEnable = hasMessage && this.sdConnected;
+                // 이미지 생성은 선택된 모델이 있고 사용 가능한 경우 활성화
+                const selectedModel = this.currentSdModel || document.getElementById('sdModelSelect').value;
+                const isQwenDirect = selectedModel === 'qwen-direct';
+                const isModelAvailable = isQwenDirect ? this.qwenDirectAvailable : this.sdConnected;
+                shouldEnable = hasMessage && selectedModel && isModelAvailable;
                 break;
             case 'img2img':
-                shouldEnable = hasMessage && this.uploadedImageUrl && this.sdConnected;
+                // img2img는 현재 ComfyUI만 지원
+                shouldEnable = hasMessage && this.uploadedImageUrl && this.sdConnected && this.currentSdModel;
                 break;
         }
         
@@ -249,10 +307,17 @@ class OllamaChat {
     }
 
     async sendMessage() {
+        console.log('sendMessage 호출됨');
         const messageInput = document.getElementById('messageInput');
         const message = messageInput.value.trim();
+        
+        console.log('현재 모드:', this.currentMode);
+        console.log('메시지:', message);
 
-        if (!message) return;
+        if (!message) {
+            console.log('빈 메시지로 인해 종료');
+            return;
+        }
 
         switch(this.currentMode) {
             case 'chat':
@@ -260,7 +325,35 @@ class OllamaChat {
                 await this.handleChatMessage(message);
                 break;
             case 'image_gen':
-                if (!this.sdConnected) return;
+                console.log('이미지 생성 모드 진입');
+                // 선택된 모델 확인
+                const selectedModel = this.currentSdModel || document.getElementById('sdModelSelect').value;
+                console.log('선택된 모델:', selectedModel);
+                console.log('qwenDirectAvailable:', this.qwenDirectAvailable);
+                console.log('sdConnected:', this.sdConnected);
+                
+                if (!selectedModel) {
+                    alert('이미지 생성 모델을 선택해주세요.');
+                    return;
+                }
+                
+                // 모델이 사용 가능한지 확인
+                const isQwenDirect = selectedModel === 'qwen-direct';
+                const isModelAvailable = isQwenDirect ? this.qwenDirectAvailable : this.sdConnected;
+                
+                console.log('isQwenDirect:', isQwenDirect);
+                console.log('isModelAvailable:', isModelAvailable);
+                
+                if (!isModelAvailable) {
+                    if (isQwenDirect) {
+                        alert('Qwen-Image 라이브러리가 설치되지 않았습니다. pip install -r requirements.txt를 실행하세요.');
+                    } else {
+                        alert('ComfyUI 서버에 연결할 수 없습니다.');
+                    }
+                    return;
+                }
+                
+                console.log('handleImageGeneration 호출 시작');
                 await this.handleImageGeneration(message);
                 break;
             case 'img2img':
@@ -300,35 +393,64 @@ class OllamaChat {
     }
 
     async handleImageGeneration(prompt) {
+        // 선택된 모델 확인
+        const selectedModel = this.currentSdModel || document.getElementById('sdModelSelect').value;
+        if (!selectedModel) {
+            this.addMessage('assistant', '이미지 생성 모델을 선택해주세요.');
+            return;
+        }
+        
         // 프롬프트 메시지 추가
-        this.addMessage('user', `🎨 이미지 생성: ${prompt}`);
+        const modelInfo = selectedModel === 'qwen-direct' ? '(Qwen 직접)' : 
+                         selectedModel.includes('qwen') ? '(Qwen ComfyUI)' : 
+                         '(SDXL)';
+        this.addMessage('user', `🎨 이미지 생성 ${modelInfo}: ${prompt}`);
         
         // 진행률 표시
         this.showProgress('이미지 생성 중...');
 
         const [width, height] = document.getElementById('imageSize').value.split('x').map(Number);
+        const steps = parseInt(document.getElementById('samplingSteps').value);
+        const cfgScale = parseFloat(document.getElementById('cfgScale').value);
+        const negativePrompt = document.getElementById('negativePrompt').value;
         
         try {
-            const response = await fetch('/api/generate_image', {
+            // Qwen 직접 구현인 경우 전용 엔드포인트 사용
+            const apiUrl = selectedModel === 'qwen-direct' ? '/api/generate_qwen_image' : '/api/generate_image';
+            
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     prompt: prompt,
-                    negative_prompt: document.getElementById('negativePrompt').value,
+                    negative_prompt: negativePrompt,
                     width: width,
                     height: height,
-                    steps: parseInt(document.getElementById('samplingSteps').value),
-                    cfg_scale: parseFloat(document.getElementById('cfgScale').value),
-                    model: this.currentSdModel
+                    steps: steps,
+                    cfg_scale: cfgScale,
+                    model: selectedModel,
+                    seed: this.generateRandomSeed()
                 })
             });
 
             const result = await response.json();
             
             if (result.success) {
-                this.addMessage('assistant', '이미지가 생성되었습니다!', result.image_url);
+                let message = '이미지가 생성되었습니다!';
+                
+                // 모델별 추가 정보 표시
+                if (result.generation_type === 'qwen_direct') {
+                    message += '\n✨ Qwen-Image 직접 구현으로 생성됨';
+                    if (result.translated_prompt && result.translated_prompt !== prompt) {
+                        message += `\n📝 번역된 프롬프트: ${result.translated_prompt}`;
+                    }
+                } else if (result.enhanced_prompt && result.enhanced_prompt !== prompt) {
+                    message += `\n💡 개선된 프롬프트: ${result.enhanced_prompt}`;
+                }
+                
+                this.addMessage('assistant', message, result.image_url);
             } else {
                 this.addMessage('assistant', `이미지 생성 실패: ${result.error}`);
             }
@@ -340,12 +462,18 @@ class OllamaChat {
         }
     }
 
+    generateRandomSeed() {
+        return Math.floor(Math.random() * 2147483647);
+    }
+
     async handleImg2Img(prompt) {
         // 프롬프트 메시지 추가
         this.addMessage('user', `🖼️ 이미지 변환: ${prompt}`, this.uploadedImageUrl);
         
         // 진행률 표시
         this.showProgress('이미지 변환 중...');
+
+        const [width, height] = (document.getElementById('img2imgSize') || document.getElementById('imageSize')).value.split('x').map(Number);
 
         try {
             const response = await fetch('/api/img2img', {
@@ -358,8 +486,11 @@ class OllamaChat {
                     prompt: prompt,
                     negative_prompt: document.getElementById('negativePrompt').value,
                     denoising_strength: parseFloat(document.getElementById('denoisingStrength').value),
+                    width: width,
+                    height: height,
                     steps: parseInt(document.getElementById('samplingSteps').value),
-                    cfg_scale: parseFloat(document.getElementById('cfgScale').value)
+                    cfg_scale: parseFloat(document.getElementById('cfgScale').value),
+                    model: this.currentSdModel
                 })
             });
 
@@ -516,7 +647,7 @@ class OllamaChat {
                             const parsed = JSON.parse(data);
                             if (parsed.choices && parsed.choices[0].delta.content) {
                                 fullContent += parsed.choices[0].delta.content;
-                                contentElement.textContent = fullContent;
+                                contentElement.innerHTML = marked.parse(fullContent);
                                 this.scrollToBottom();
                             }
                         } catch (e) {
@@ -571,7 +702,12 @@ class OllamaChat {
         if (isLoading) {
             textDiv.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
         } else {
-            textDiv.textContent = content;
+            // Markdown 렌더링 적용 (assistant 메시지에만)
+            if (role === 'assistant' && content) {
+                textDiv.innerHTML = marked.parse(content);
+            } else {
+                textDiv.textContent = content;
+            }
         }
 
         contentDiv.appendChild(textDiv);
@@ -586,13 +722,28 @@ class OllamaChat {
 
         chatMessages.appendChild(messageDiv);
         this.scrollToBottom();
+        
+        // 이미지 클릭 이벤트 추가
+        if (imageUrl) {
+            const img = messageDiv.querySelector('img');
+            if (img) {
+                img.addEventListener('click', () => {
+                    this.openImageModal(img.src);
+                });
+            }
+        }
 
         return messageDiv;
     }
 
     updateMessage(messageElement, content) {
         const textElement = messageElement.querySelector('.message-text');
-        textElement.textContent = content;
+        // 메시지가 assistant의 메시지인지 확인
+        if (messageElement.classList.contains('assistant') && content) {
+            textElement.innerHTML = marked.parse(content);
+        } else {
+            textElement.textContent = content;
+        }
         this.scrollToBottom();
     }
 
@@ -613,9 +764,48 @@ class OllamaChat {
         const chatMessages = document.getElementById('chatMessages');
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
+    
+    openImageModal(imageSrc) {
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+        
+        modal.style.display = 'block';
+        modalImg.src = imageSrc;
+        
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', this.handleModalKeydown.bind(this));
+    }
+    
+    closeImageModal() {
+        const modal = document.getElementById('imageModal');
+        modal.style.display = 'none';
+        document.removeEventListener('keydown', this.handleModalKeydown.bind(this));
+    }
+    
+    handleModalKeydown(event) {
+        if (event.key === 'Escape') {
+            this.closeImageModal();
+        }
+    }
 }
 
 // 앱 초기화
 document.addEventListener('DOMContentLoaded', () => {
     window.ollamaChat = new OllamaChat();
+    
+    // 모달 닫기 이벤트
+    const modal = document.getElementById('imageModal');
+    const closeBtn = document.querySelector('.image-modal-close');
+    
+    // X 버튼 클릭으로 모달 닫기
+    closeBtn.addEventListener('click', () => {
+        window.ollamaChat.closeImageModal();
+    });
+    
+    // 배경 클릭으로 모달 닫기
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            window.ollamaChat.closeImageModal();
+        }
+    });
 });

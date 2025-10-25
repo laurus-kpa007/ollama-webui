@@ -35,12 +35,15 @@
                     </select>
                 </div>
 
-                <!-- SD Model Selection -->
+                <!-- ComfyUI Image Model Selection -->
                 <div id="sdModelSection" class="mb-3" style="display: none;">
                     <label class="form-label text-white">이미지 생성 모델</label>
                     <select id="sdModelSelect" class="form-select">
                         <option value="">모델을 선택하세요...</option>
                     </select>
+                    <div id="imageConnectionStatus" class="mt-1">
+                        <span class="badge bg-secondary">연결 확인 중...</span>
+                    </div>
                 </div>
                 
                 <!-- Chat Settings -->
@@ -64,14 +67,16 @@
                     </div>
                 </div>
 
-                <!-- Image Generation Settings -->
+                <!-- ComfyUI Image Generation Settings -->
                 <div id="imageGenSettings" style="display: none;">
                     <div class="mb-3">
                         <label class="form-label text-white">이미지 크기</label>
                         <select id="imageSize" class="form-select">
-                            <option value="512x512">512x512</option>
+                            <option value="1024x1024" selected>1024x1024 (Qwen/SDXL 최적)</option>
+                            <option value="832x1216">832x1216 (세로)</option>
+                            <option value="1216x832">1216x832 (가로)</option>
                             <option value="768x768">768x768</option>
-                            <option value="1024x1024">1024x1024</option>
+                            <option value="512x512">512x512</option>
                             <option value="512x768">512x768 (세로)</option>
                             <option value="768x512">768x512 (가로)</option>
                         </select>
@@ -79,13 +84,13 @@
                     
                     <div class="mb-3">
                         <label class="form-label text-white">샘플링 스텝</label>
-                        <input type="range" id="samplingSteps" class="form-range" min="10" max="50" step="1" value="20">
-                        <span id="stepsValue" class="text-white small">20</span>
+                        <input type="range" id="samplingSteps" class="form-range" min="10" max="100" step="5" value="50">
+                        <span id="stepsValue" class="text-white small">50</span>
                     </div>
                     
                     <div class="mb-3">
                         <label class="form-label text-white">CFG Scale</label>
-                        <input type="range" id="cfgScale" class="form-range" min="1" max="20" step="0.5" value="7">
+                        <input type="range" id="cfgScale" class="form-range" min="1" max="15" step="0.5" value="7">
                         <span id="cfgValue" class="text-white small">7</span>
                     </div>
                     
@@ -93,14 +98,33 @@
                         <label class="form-label text-white">네거티브 프롬프트</label>
                         <textarea id="negativePrompt" class="form-control" rows="2" placeholder="생성하지 않을 내용을 입력하세요..."></textarea>
                     </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" id="enableQwen" class="form-check-input" checked>
+                            <label class="form-check-label text-white" for="enableQwen">
+                                🎯 Qwen 프롬프트 개선 사용
+                            </label>
+                            <small class="text-white-50 d-block">AI가 프롬프트를 자동으로 개선하여 더 좋은 이미지를 생성합니다</small>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Img2Img Settings -->
+                <!-- ComfyUI Img2Img Settings -->
                 <div id="img2imgSettings" style="display: none;">
                     <div class="mb-3">
                         <label class="form-label text-white">디노이징 강도</label>
-                        <input type="range" id="denoisingStrength" class="form-range" min="0.1" max="1.0" step="0.1" value="0.7">
-                        <span id="denoisingValue" class="text-white small">0.7</span>
+                        <input type="range" id="denoisingStrength" class="form-range" min="0.1" max="1.0" step="0.1" value="0.8">
+                        <span id="denoisingValue" class="text-white small">0.8</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-white">이미지 크기</label>
+                        <select id="img2imgSize" class="form-select">
+                            <option value="512x512">512x512</option>
+                            <option value="768x768">768x768</option>
+                            <option value="1024x1024">1024x1024</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -162,8 +186,16 @@
         </div>
     </div>
     
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <span class="image-modal-close">&times;</span>
+        <img class="image-modal-content" id="modalImage">
+    </div>
+    
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Marked JS for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
