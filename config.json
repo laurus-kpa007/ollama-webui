@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "Ollama WebUI",
+    "version": "2.0.0",
+    "debug": false,
+    "host": "0.0.0.0",
+    "port": 5000
+  },
+  "database": {
+    "uri": "sqlite:///app.db",
+    "pool_size": 10,
+    "echo": false
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "enabled": false
+  },
+  "ollama": {
+    "host": "localhost",
+    "port": 11434,
+    "default_model": "llama2"
+  },
+  "comfyui": {
+    "host": "localhost",
+    "port": 8188,
+    "enabled": true
+  },
+  "sessions": {
+    "max_per_user": 100,
+    "auto_archive_days": 30,
+    "default_user_id": "default-user"
+  },
+  "plugins": {
+    "directory": "plugins",
+    "enabled": []
+  },
+  "security": {
+    "secret_key": "ed405928517155cbc8c38ea596a666cdf19c46658dbf9b58",
+    "max_content_length": 16777216
+  },
+  "autogen": {
+    "enabled": false,
+    "default_agents": [
+      "researcher",
+      "coder",
+      "creative"
+    ]
+  },
+  "mcp": {
+    "enabled": false,
+    "servers": []
+  }
+}

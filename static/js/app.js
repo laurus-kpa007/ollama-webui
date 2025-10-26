@@ -790,22 +790,42 @@ class OllamaChat {
 }
 
 // 앱 초기화
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     window.ollamaChat = new OllamaChat();
-    
+
+    // Initialize new managers for v2.0 features
+    if (typeof SessionManager !== 'undefined') {
+        window.sessionManager = new SessionManager();
+        await window.sessionManager.initialize();
+    }
+
+    if (typeof MCPManager !== 'undefined') {
+        window.mcpManager = new MCPManager();
+        await window.mcpManager.initialize();
+    }
+
+    if (typeof AutogenManager !== 'undefined') {
+        window.autogenManager = new AutogenManager();
+        await window.autogenManager.initialize();
+    }
+
+    console.log('✓ All managers initialized');
+
     // 모달 닫기 이벤트
     const modal = document.getElementById('imageModal');
     const closeBtn = document.querySelector('.image-modal-close');
-    
-    // X 버튼 클릭으로 모달 닫기
-    closeBtn.addEventListener('click', () => {
-        window.ollamaChat.closeImageModal();
-    });
-    
-    // 배경 클릭으로 모달 닫기
-    modal.addEventListener('click', (event) => {
-        if (event.target === modal) {
+
+    if (modal && closeBtn) {
+        // X 버튼 클릭으로 모달 닫기
+        closeBtn.addEventListener('click', () => {
             window.ollamaChat.closeImageModal();
-        }
-    });
+        });
+
+        // 배경 클릭으로 모달 닫기
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                window.ollamaChat.closeImageModal();
+            }
+        });
+    }
 });
