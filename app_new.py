@@ -133,12 +133,12 @@ def register_legacy_routes(app):
 
     @app.route('/')
     def index():
-        return render_template('index_new.html')
+        return render_template('index.html')
 
     @app.route('/old')
     def index_old():
         """Legacy UI for backward compatibility"""
-        return render_template('index.html')
+        return render_template('index_old_backup.html')
 
     @app.route('/api/models')
     def get_models():

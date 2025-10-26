@@ -1,201 +1,307 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama WebUI</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet">
+    <title>Ollama WebUI v2.0 - Multi-Agent AI</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/sessions.css">
+    <link rel="stylesheet" href="/static/css/mcp-tools.css">
+
+    <style>
+        /* Additional layout styles */
+        .main-layout {
+            display: flex;
+            height: 100vh;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tabs {
+            display: flex;
+            background: #2a2a2a;
+            border-bottom: 1px solid #444;
+            padding: 0 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #888;
+            font-size: 0.95em;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab.active {
+            color: #fff;
+            border-bottom-color: #0066cc;
+        }
+
+        .tab:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Agents panel */
+        .agents-panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .agent-card {
+            background: #222;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .agent-card:hover {
+            background: #2a2a2a;
+            border-color: #444;
+        }
+
+        .agent-card.selected {
+            border-color: #0066cc;
+            background: rgba(0, 102, 204, 0.1);
+        }
+
+        .workflow-card {
+            background: #222;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .workflow-card:hover {
+            background: #2a2a2a;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .workflow-agents {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 8px;
+        }
+
+        #agent-result, #agent-task {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        #agent-result {
+            min-height: 200px;
+        }
+
+        select {
+            padding: 8px 12px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.9em;
+        }
+    </style>
 </head>
 <body>
-    <div class="container-fluid h-100">
-        <div class="row h-100">
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar p-3">
-                <h4 class="text-white mb-4">
-                    <i class="fas fa-robot"></i> Ollama WebUI
-                </h4>
-                
-                <!-- Mode Selection -->
-                <div class="mb-3">
-                    <label class="form-label text-white">모드 선택</label>
-                    <select id="modeSelect" class="form-select">
-                        <option value="chat">💬 채팅</option>
-                        <option value="image_gen">🎨 이미지 생성</option>
-                        <option value="img2img">🖼️ 이미지 변환</option>
-                    </select>
-                </div>
+    <div class="main-layout">
+        <!-- Session Sidebar -->
+        <div id="session-sidebar">
+            <div class="sidebar-header">
+                <h2>Conversations</h2>
+                <button id="new-chat-btn">➕ New Chat</button>
+            </div>
 
-                <!-- Chat Model Selection -->
-                <div id="chatModelSection" class="mb-3">
-                    <label class="form-label text-white">채팅 모델</label>
-                    <select id="modelSelect" class="form-select">
-                        <option value="">모델을 선택하세요...</option>
-                    </select>
-                </div>
+            <div class="sidebar-search">
+                <input type="text" id="session-search" placeholder="Search conversations...">
+            </div>
 
-                <!-- ComfyUI Image Model Selection -->
-                <div id="sdModelSection" class="mb-3" style="display: none;">
-                    <label class="form-label text-white">이미지 생성 모델</label>
-                    <select id="sdModelSelect" class="form-select">
-                        <option value="">모델을 선택하세요...</option>
-                    </select>
-                    <div id="imageConnectionStatus" class="mt-1">
-                        <span class="badge bg-secondary">연결 확인 중...</span>
-                    </div>
-                </div>
-                
-                <!-- Chat Settings -->
-                <div id="chatSettings">
-                    <div class="mb-3">
-                        <label class="form-label text-white">온도 (Temperature)</label>
-                        <input type="range" id="temperature" class="form-range" min="0" max="2" step="0.1" value="0.7">
-                        <span id="tempValue" class="text-white small">0.7</span>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-white">최대 토큰 수</label>
-                        <input type="number" id="maxTokens" class="form-control" placeholder="기본값 사용" min="1" max="4000">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" id="streamMode" class="form-check-input" checked>
-                            <label class="form-check-label text-white" for="streamMode">스트림 모드</label>
+            <div id="session-list">
+                <!-- Sessions will be rendered here -->
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content-wrapper main-content">
+            <!-- Top Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('chat')">💬 Chat</button>
+                <button class="tab" onclick="switchTab('tools')">🔧 Tools</button>
+                <button class="tab" onclick="switchTab('agents')">🤖 Agents</button>
+                <button class="tab" onclick="switchTab('plugins')">🧩 Plugins</button>
+            </div>
+
+            <!-- Chat Tab -->
+            <div id="chat-tab" class="tab-content active">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <select id="model-select">
+                            <option value="llama2">Llama 2</option>
+                            <option value="qwen2.5:7b">Qwen 2.5:7B</option>
+                        </select>
+
+                        <div class="header-actions">
+                            <button id="toggle-sidebar-btn">☰</button>
                         </div>
                     </div>
-                </div>
 
-                <!-- ComfyUI Image Generation Settings -->
-                <div id="imageGenSettings" style="display: none;">
-                    <div class="mb-3">
-                        <label class="form-label text-white">이미지 크기</label>
-                        <select id="imageSize" class="form-select">
-                            <option value="1024x1024" selected>1024x1024 (Qwen/SDXL 최적)</option>
-                            <option value="832x1216">832x1216 (세로)</option>
-                            <option value="1216x832">1216x832 (가로)</option>
-                            <option value="768x768">768x768</option>
-                            <option value="512x512">512x512</option>
-                            <option value="512x768">512x768 (세로)</option>
-                            <option value="768x512">768x512 (가로)</option>
-                        </select>
+                    <div id="chat-messages" class="chat-messages">
+                        <!-- Messages will appear here -->
                     </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-white">샘플링 스텝</label>
-                        <input type="range" id="samplingSteps" class="form-range" min="10" max="100" step="5" value="50">
-                        <span id="stepsValue" class="text-white small">50</span>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-white">CFG Scale</label>
-                        <input type="range" id="cfgScale" class="form-range" min="1" max="15" step="0.5" value="7">
-                        <span id="cfgValue" class="text-white small">7</span>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-white">네거티브 프롬프트</label>
-                        <textarea id="negativePrompt" class="form-control" rows="2" placeholder="생성하지 않을 내용을 입력하세요..."></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" id="enableQwen" class="form-check-input" checked>
-                            <label class="form-check-label text-white" for="enableQwen">
-                                🎯 Qwen 프롬프트 개선 사용
-                            </label>
-                            <small class="text-white-50 d-block">AI가 프롬프트를 자동으로 개선하여 더 좋은 이미지를 생성합니다</small>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- ComfyUI Img2Img Settings -->
-                <div id="img2imgSettings" style="display: none;">
-                    <div class="mb-3">
-                        <label class="form-label text-white">디노이징 강도</label>
-                        <input type="range" id="denoisingStrength" class="form-range" min="0.1" max="1.0" step="0.1" value="0.8">
-                        <span id="denoisingValue" class="text-white small">0.8</span>
+                    <div class="chat-input-container">
+                        <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
+                        <button id="send-btn" class="send-btn">Send</button>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label text-white">이미지 크기</label>
-                        <select id="img2imgSize" class="form-select">
-                            <option value="512x512">512x512</option>
-                            <option value="768x768">768x768</option>
-                            <option value="1024x1024">1024x1024</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- New Chat Button -->
-                <button id="newChatBtn" class="btn btn-success w-100 mb-3">
-                    <i class="fas fa-plus"></i> 새 채팅
-                </button>
-                
-                <!-- File Upload -->
-                <div class="mb-3">
-                    <label class="form-label text-white">이미지 업로드</label>
-                    <input type="file" id="fileInput" class="form-control" accept="image/*">
                 </div>
             </div>
-            
-            <!-- Main Chat Area -->
-            <div class="col-md-9 col-lg-10 main-content d-flex flex-column">
-                <!-- Chat Header -->
-                <div class="chat-header p-3 border-bottom">
-                    <h5 class="mb-0">
-                        <span id="currentModel">모델을 선택하세요</span>
-                        <span id="connectionStatus" class="badge bg-secondary ms-2">연결 확인 중...</span>
-                    </h5>
-                </div>
-                
-                <!-- Chat Messages -->
-                <div id="chatMessages" class="flex-grow-1 p-3 overflow-auto">
-                    <div class="welcome-message text-center text-muted">
-                        <i class="fas fa-robot fa-3x mb-3"></i>
-                        <h4>Ollama WebUI에 오신 것을 환영합니다!</h4>
-                        <p>왼쪽에서 모델을 선택하고 대화를 시작하세요.</p>
-                    </div>
-                </div>
-                
-                <!-- Chat Input -->
-                <div class="chat-input p-3 border-top">
-                    <div class="input-group">
-                        <textarea id="messageInput" class="form-control" placeholder="메시지를 입력하세요..." rows="2"></textarea>
-                        <button id="sendBtn" class="btn btn-primary" disabled>
-                            <i id="sendIcon" class="fas fa-paper-plane"></i>
-                            <span id="sendText"></span>
-                        </button>
-                    </div>
-                    <div id="uploadedImage" class="mt-2" style="display: none;">
-                        <img id="previewImage" class="img-thumbnail" style="max-width: 200px; max-height: 200px;">
-                        <button id="removeImage" class="btn btn-sm btn-danger ms-2">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <!-- Progress Bar -->
-                    <div id="progressContainer" class="mt-2" style="display: none;">
-                        <div class="progress">
-                            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+
+            <!-- Tools Tab (MCP) -->
+            <div id="tools-tab" class="tab-content">
+                <div class="tools-panel">
+                    <div class="tools-panel-header">
+                        <div>
+                            <h3>MCP Tools</h3>
+                            <div id="mcp-status"></div>
                         </div>
-                        <small id="progressText" class="text-muted">이미지 생성 중...</small>
+                        <div class="tools-actions">
+                            <button id="mcp-connect-btn">Connect</button>
+                            <button id="mcp-disconnect-btn" style="display:none;">Disconnect</button>
+                            <button id="mcp-test-btn">Test Tools</button>
+                        </div>
                     </div>
+
+                    <div class="tool-search-box">
+                        <input type="text" id="tool-search" placeholder="Search tools...">
+                    </div>
+
+                    <div id="tools-list">
+                        <!-- Tools will be rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents Tab (Autogen) -->
+            <div id="agents-tab" class="tab-content">
+                <div class="agents-panel">
+                    <h3>Multi-Agent System</h3>
+
+                    <div style="margin-bottom: 20px;">
+                        <h4>Workflows</h4>
+                        <div id="workflows-list">
+                            <!-- Workflows will be rendered here -->
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <h4>Select Agents</h4>
+                        <div id="agents-list">
+                            <!-- Agents will be rendered here -->
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label>Task Mode:</label>
+                        <select id="agent-mode">
+                            <option value="sequential">Sequential</option>
+                            <option value="group">Group Chat</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label>Task Description:</label>
+                        <textarea id="agent-task" placeholder="Describe the task for agents..."></textarea>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <button id="run-agents-btn" class="btn-primary">Run Agent Task</button>
+                        <button id="test-agents-btn" style="margin-left: 10px;">Test Agents</button>
+                    </div>
+
+                    <div id="agent-result">
+                        <!-- Results will appear here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plugins Tab -->
+            <div id="plugins-tab" class="tab-content">
+                <div class="plugins-panel">
+                    <h3>Plugins</h3>
+                    <p>Plugin management UI - Coming soon!</p>
+                    <button onclick="fetch('/api/plugins/').then(r=>r.json()).then(d=>console.log(d))">
+                        List Plugins (Check Console)
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Image Modal -->
-    <div id="imageModal" class="image-modal">
-        <span class="image-modal-close">&times;</span>
-        <img class="image-modal-content" id="modalImage">
-    </div>
-    
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Marked JS for Markdown rendering -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- JavaScript -->
+    <script src="/static/js/session-manager.js"></script>
+    <script src="/static/js/mcp-manager.js"></script>
+    <script src="/static/js/autogen-manager.js"></script>
     <script src="/static/js/app.js"></script>
+
+    <script>
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Ollama WebUI v2.0 loaded');
+        });
+    </script>
 </body>
 </html>
