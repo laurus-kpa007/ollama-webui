@@ -1,42 +1,44 @@
 """
-Autogen Service - Multi-agent system using Microsoft AutoGen
+Autogen Service - Multi-agent system using Microsoft AutoGen 0.7.5
+Updated to use autogen-agentchat async API
 """
 from typing import List, Dict, Any, Optional
-import autogen
-from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import RoundRobinGroupChat, SelectorGroupChat
+from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
+from autogen_agentchat.messages import TextMessage
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+import asyncio
 import json
 
+
 class AutogenService:
-    """Multi-agent system using AutoGen"""
+    """Multi-agent system using AutoGen 0.7.5"""
 
     def __init__(self, ollama_base_url="http://localhost:11434"):
         self.ollama_base_url = ollama_base_url
-        self.config_list = [{
-            "model": "llama2",
-            "api_base": f"{ollama_base_url}/v1",
-            "api_key": "ollama",  # Ollama doesn't need a real API key
-            "api_type": "open_ai"
-        }]
+
+        # Create model client for Ollama (OpenAI-compatible API)
+        self.model_client = OpenAIChatCompletionClient(
+            model="llama2",
+            api_key="ollama",  # Ollama doesn't need a real API key
+            base_url=f"{ollama_base_url}/v1"
+        )
+
         self.agents = {}
-        self.group_chat = None
-        self.manager = None
         self.conversation_history = []
 
-    def create_agents(self, temperature: float = 0.7):
-        """Create specialized agents
+    async def create_agents(self, temperature: float = 0.7):
+        """Create specialized agents (async)
 
         Args:
             temperature: Temperature for LLM responses
         """
-        base_config = {
-            "config_list": self.config_list,
-            "temperature": temperature,
-        }
-
         # Researcher Agent
         self.agents['researcher'] = AssistantAgent(
             name="Researcher",
-            llm_config=base_config,
+            description="Research assistant for gathering and analyzing information",
+            model_client=self.model_client,
             system_message="""You are a research assistant. Your role is to:
 - Gather and analyze information
 - Provide comprehensive research summaries
@@ -50,7 +52,8 @@ Be thorough, accurate, and analytical in your research."""
         # Coder Agent
         self.agents['coder'] = AssistantAgent(
             name="Coder",
-            llm_config={**base_config, "temperature": 0.3},  # Lower temp for coding
+            description="Senior software engineer for coding tasks",
+            model_client=self.model_client,
             system_message="""You are a senior software engineer. Your role is to:
 - Write clean, efficient, and maintainable code
 - Debug and fix issues
@@ -64,7 +67,8 @@ Provide code examples and explanations."""
         # Creative Agent
         self.agents['creative'] = AssistantAgent(
             name="Creative",
-            llm_config={**base_config, "temperature": 0.9},  # Higher temp for creativity
+            description="Creative specialist for innovative ideas and content",
+            model_client=self.model_client,
             system_message="""You are a creative specialist. Your role is to:
 - Generate innovative ideas and solutions
 - Write engaging narratives and content
@@ -78,7 +82,8 @@ Be imaginative, original, and inspiring."""
         # Image Specialist Agent
         self.agents['image_specialist'] = AssistantAgent(
             name="ImageSpecialist",
-            llm_config=base_config,
+            description="Image generation expert for creating detailed prompts",
+            model_client=self.model_client,
             system_message="""You are an image generation expert. Your role is to:
 - Create detailed image generation prompts
 - Enhance user prompts with artistic details
@@ -92,7 +97,8 @@ Focus on visual quality, composition, and artistic elements."""
         # Critic/Reviewer Agent
         self.agents['critic'] = AssistantAgent(
             name="Critic",
-            llm_config={**base_config, "temperature": 0.5},
+            description="Quality reviewer for critical analysis and feedback",
+            model_client=self.model_client,
             system_message="""You are a quality reviewer. Your role is to:
 - Review outputs from other agents critically
 - Provide constructive feedback
@@ -106,7 +112,8 @@ Be objective, thorough, and helpful in your reviews."""
         # Planner Agent
         self.agents['planner'] = AssistantAgent(
             name="Planner",
-            llm_config=base_config,
+            description="Strategic planner for task coordination and planning",
+            model_client=self.model_client,
             system_message="""You are a strategic planner. Your role is to:
 - Break down complex tasks into steps
 - Create actionable plans
@@ -117,51 +124,10 @@ Be objective, thorough, and helpful in your reviews."""
 Be organized, systematic, and goal-oriented."""
         )
 
-        # User Proxy (represents the human user)
-        self.agents['user_proxy'] = UserProxyAgent(
-            name="User",
-            human_input_mode="NEVER",  # Fully automated
-            max_consecutive_auto_reply=10,
-            is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
-            code_execution_config=False,  # Disable code execution for safety
-        )
-
         print(f"✓ Created {len(self.agents)} agents")
 
-    def setup_group_chat(self, agent_names: List[str], max_round: int = 12):
-        """Setup group chat with specified agents
-
-        Args:
-            agent_names: List of agent names to include
-            max_round: Maximum number of conversation rounds
-        """
-        agent_list = []
-
-        for name in agent_names:
-            if name in self.agents:
-                agent_list.append(self.agents[name])
-            else:
-                print(f"Warning: Agent '{name}' not found")
-
-        if not agent_list:
-            raise ValueError("No valid agents specified")
-
-        self.group_chat = GroupChat(
-            agents=agent_list,
-            messages=[],
-            max_round=max_round,
-            speaker_selection_method="auto",  # or "round_robin", "manual"
-        )
-
-        self.manager = GroupChatManager(
-            groupchat=self.group_chat,
-            llm_config={"config_list": self.config_list}
-        )
-
-        print(f"✓ Group chat setup with {len(agent_list)} agents")
-
-    def sequential_task(self, task: str, agent_names: List[str]) -> Dict[str, Any]:
-        """Execute task sequentially across agents
+    async def sequential_task(self, task: str, agent_names: List[str]) -> Dict[str, Any]:
+        """Execute task sequentially across agents (async)
 
         Args:
             task: The task description
@@ -170,54 +136,70 @@ Be organized, systematic, and goal-oriented."""
         Returns:
             Task results with conversation history
         """
-        if 'user_proxy' not in self.agents:
-            self.create_agents()
+        if not self.agents:
+            await self.create_agents()
 
-        current_result = task
         conversation = []
+        current_message = task
 
+        # Create RoundRobinGroupChat for sequential execution
+        agent_list = []
         for agent_name in agent_names:
-            if agent_name not in self.agents or agent_name == 'user_proxy':
-                continue
+            if agent_name in self.agents:
+                agent_list.append(self.agents[agent_name])
+            else:
+                print(f"Warning: Agent '{agent_name}' not found")
 
-            agent = self.agents[agent_name]
-            user_proxy = self.agents['user_proxy']
+        if not agent_list:
+            return {
+                'task': task,
+                'mode': 'sequential',
+                'agents': agent_names,
+                'error': 'No valid agents specified',
+                'conversation': []
+            }
 
-            # Start conversation
-            try:
-                user_proxy.initiate_chat(
-                    agent,
-                    message=current_result,
-                    max_turns=1
-                )
+        try:
+            # Create termination condition
+            termination = MaxMessageTermination(max_messages=len(agent_list) * 2) | TextMentionTermination("TERMINATE")
 
-                # Get last message as result
-                if hasattr(agent, 'last_message') and callable(agent.last_message):
-                    last_msg = agent.last_message()
-                    current_result = last_msg.get("content", current_result) if isinstance(last_msg, dict) else str(last_msg)
+            # Create round-robin team
+            team = RoundRobinGroupChat(agent_list, termination_condition=termination)
 
+            # Run the task
+            result = await team.run(task=task)
+
+            # Extract conversation from result
+            for message in result.messages:
                 conversation.append({
-                    'agent': agent_name,
-                    'message': current_result
+                    'agent': message.source if hasattr(message, 'source') else 'unknown',
+                    'content': message.content if hasattr(message, 'content') else str(message),
+                    'type': type(message).__name__
                 })
 
-            except Exception as e:
-                print(f"Error with agent {agent_name}: {e}")
-                conversation.append({
-                    'agent': agent_name,
-                    'error': str(e)
-                })
+            final_result = conversation[-1]['content'] if conversation else "No result"
 
-        return {
-            'task': task,
-            'mode': 'sequential',
-            'agents': agent_names,
-            'conversation': conversation,
-            'final_result': current_result
-        }
+            return {
+                'task': task,
+                'mode': 'sequential',
+                'agents': agent_names,
+                'conversation': conversation,
+                'final_result': final_result,
+                'stop_reason': result.stop_reason if hasattr(result, 'stop_reason') else 'completed'
+            }
 
-    def group_task(self, task: str, agent_names: List[str], max_round: int = 12) -> Dict[str, Any]:
-        """Execute task as group collaboration
+        except Exception as e:
+            print(f"Error in sequential task: {e}")
+            return {
+                'task': task,
+                'mode': 'sequential',
+                'agents': agent_names,
+                'error': str(e),
+                'conversation': conversation
+            }
+
+    async def group_task(self, task: str, agent_names: List[str], max_round: int = 12) -> Dict[str, Any]:
+        """Execute task as group collaboration (async)
 
         Args:
             task: The task description
@@ -228,27 +210,46 @@ Be organized, systematic, and goal-oriented."""
             Task results with full conversation
         """
         if not self.agents:
-            self.create_agents()
+            await self.create_agents()
 
-        # Ensure user_proxy is included
-        if 'user_proxy' not in agent_names:
-            agent_names = ['user_proxy'] + agent_names
+        agent_list = []
+        for agent_name in agent_names:
+            if agent_name in self.agents:
+                agent_list.append(self.agents[agent_name])
+            else:
+                print(f"Warning: Agent '{agent_name}' not found")
+
+        if not agent_list:
+            return {
+                'task': task,
+                'mode': 'group',
+                'agents': agent_names,
+                'error': 'No valid agents specified',
+                'conversation': []
+            }
 
         try:
-            self.setup_group_chat(agent_names, max_round)
+            # Create termination condition
+            termination = MaxMessageTermination(max_messages=max_round) | TextMentionTermination("TERMINATE")
 
-            user_proxy = self.agents['user_proxy']
-            user_proxy.initiate_chat(self.manager, message=task)
+            # Create selector-based group chat (dynamic speaker selection)
+            team = SelectorGroupChat(
+                agent_list,
+                model_client=self.model_client,
+                termination_condition=termination
+            )
+
+            # Run the task
+            result = await team.run(task=task)
 
             # Extract conversation
             conversation = []
-            if self.group_chat:
-                for msg in self.group_chat.messages:
-                    conversation.append({
-                        'agent': msg.get('name', 'unknown'),
-                        'content': msg.get('content', ''),
-                        'role': msg.get('role', 'assistant')
-                    })
+            for message in result.messages:
+                conversation.append({
+                    'agent': message.source if hasattr(message, 'source') else 'unknown',
+                    'content': message.content if hasattr(message, 'content') else str(message),
+                    'type': type(message).__name__
+                })
 
             final_result = conversation[-1]['content'] if conversation else "No result"
 
@@ -258,10 +259,12 @@ Be organized, systematic, and goal-oriented."""
                 'agents': agent_names,
                 'conversation': conversation,
                 'final_result': final_result,
-                'total_rounds': len(conversation)
+                'total_rounds': len(conversation),
+                'stop_reason': result.stop_reason if hasattr(result, 'stop_reason') else 'completed'
             }
 
         except Exception as e:
+            print(f"Error in group task: {e}")
             return {
                 'task': task,
                 'mode': 'group',
@@ -270,8 +273,8 @@ Be organized, systematic, and goal-oriented."""
                 'conversation': []
             }
 
-    def image_generation_workflow(self, user_prompt: str) -> Dict[str, Any]:
-        """Specialized workflow for image generation
+    async def image_generation_workflow(self, user_prompt: str) -> Dict[str, Any]:
+        """Specialized workflow for image generation (async)
 
         Workflow:
         1. Creative agent enhances the prompt
@@ -285,27 +288,24 @@ Be organized, systematic, and goal-oriented."""
             Enhanced prompts and workflow results
         """
         if not self.agents:
-            self.create_agents()
+            await self.create_agents()
 
         workflow_steps = []
 
-        # Step 1: Creative enhancement
+        # Get required agents
         creative = self.agents.get('creative')
-        user_proxy = self.agents['user_proxy']
+        critic = self.agents.get('critic')
+        image_specialist = self.agents.get('image_specialist')
 
-        if not creative or not user_proxy:
+        if not all([creative, critic, image_specialist]):
             return {'error': 'Required agents not available'}
 
         try:
-            # Creative enhancement
-            user_proxy.initiate_chat(
-                creative,
-                message=f"Enhance this image prompt creatively, adding artistic details: {user_prompt}",
-                max_turns=1
-            )
+            # Step 1: Creative enhancement
+            creative_task = f"Enhance this image prompt creatively, adding artistic details: {user_prompt}"
+            creative_result = await creative.run(task=creative_task)
 
-            enhanced_msg = creative.last_message() if hasattr(creative, 'last_message') else {}
-            enhanced_prompt = enhanced_msg.get("content", user_prompt) if isinstance(enhanced_msg, dict) else str(enhanced_msg)
+            enhanced_prompt = creative_result.messages[-1].content if creative_result.messages else user_prompt
 
             workflow_steps.append({
                 'step': 'creative_enhancement',
@@ -314,31 +314,19 @@ Be organized, systematic, and goal-oriented."""
             })
 
             # Step 2: Critic review
-            critic = self.agents.get('critic')
-            if critic:
-                user_proxy.initiate_chat(
-                    critic,
-                    message=f"Review this enhanced image prompt and suggest improvements:\n{enhanced_prompt}",
-                    max_turns=1
-                )
+            critic_task = f"Review this enhanced image prompt and suggest improvements:\n{enhanced_prompt}"
+            critic_result = await critic.run(task=critic_task)
 
-                reviewed_msg = critic.last_message() if hasattr(critic, 'last_message') else {}
-                reviewed_prompt = reviewed_msg.get("content", enhanced_prompt) if isinstance(reviewed_msg, dict) else str(reviewed_msg)
+            reviewed_prompt = critic_result.messages[-1].content if critic_result.messages else enhanced_prompt
 
-                workflow_steps.append({
-                    'step': 'critic_review',
-                    'agent': 'critic',
-                    'result': reviewed_prompt
-                })
-            else:
-                reviewed_prompt = enhanced_prompt
+            workflow_steps.append({
+                'step': 'critic_review',
+                'agent': 'critic',
+                'result': reviewed_prompt
+            })
 
             # Step 3: Image specialist final prompt
-            image_specialist = self.agents.get('image_specialist')
-            if image_specialist:
-                user_proxy.initiate_chat(
-                    image_specialist,
-                    message=f"""Based on this reviewed prompt, create a final technical prompt for image generation.
+            specialist_task = f"""Based on this reviewed prompt, create a final technical prompt for image generation.
 Include:
 - Detailed visual description
 - Art style and technique
@@ -347,20 +335,16 @@ Include:
 - Technical details (resolution, quality)
 - Appropriate negative prompt
 
-Reviewed prompt: {reviewed_prompt}""",
-                    max_turns=1
-                )
+Reviewed prompt: {reviewed_prompt}"""
 
-                final_msg = image_specialist.last_message() if hasattr(image_specialist, 'last_message') else {}
-                final_output = final_msg.get("content", reviewed_prompt) if isinstance(final_msg, dict) else str(final_msg)
+            specialist_result = await image_specialist.run(task=specialist_task)
+            final_output = specialist_result.messages[-1].content if specialist_result.messages else reviewed_prompt
 
-                workflow_steps.append({
-                    'step': 'technical_prompt',
-                    'agent': 'image_specialist',
-                    'result': final_output
-                })
-            else:
-                final_output = reviewed_prompt
+            workflow_steps.append({
+                'step': 'technical_prompt',
+                'agent': 'image_specialist',
+                'result': final_output
+            })
 
             return {
                 'original': user_prompt,
@@ -370,6 +354,7 @@ Reviewed prompt: {reviewed_prompt}""",
             }
 
         except Exception as e:
+            print(f"Error in image generation workflow: {e}")
             return {
                 'original': user_prompt,
                 'error': str(e),
@@ -386,12 +371,11 @@ Reviewed prompt: {reviewed_prompt}""",
         agent_info = []
 
         for name, agent in self.agents.items():
-            if name == 'user_proxy':
-                continue
-
             info = {
                 'name': name,
-                'system_message': agent.system_message if hasattr(agent, 'system_message') else '',
+                'display_name': agent.name if hasattr(agent, 'name') else name,
+                'description': agent.description if hasattr(agent, 'description') else '',
+                'system_message': agent._system_messages[0].content if hasattr(agent, '_system_messages') and agent._system_messages else '',
                 'type': 'assistant'
             }
             agent_info.append(info)
@@ -401,11 +385,11 @@ Reviewed prompt: {reviewed_prompt}""",
     def clear_conversation(self):
         """Clear conversation history"""
         self.conversation_history = []
-        if self.group_chat:
-            self.group_chat.messages = []
+
 
 # Singleton instance
 _autogen_service = None
+
 
 def get_autogen_service() -> AutogenService:
     """Get the global AutoGen service instance
@@ -416,5 +400,17 @@ def get_autogen_service() -> AutogenService:
     global _autogen_service
     if _autogen_service is None:
         _autogen_service = AutogenService()
-        _autogen_service.create_agents()
+        # Note: create_agents() is now async, so it should be called when needed
     return _autogen_service
+
+
+async def initialize_autogen_service() -> AutogenService:
+    """Initialize the AutoGen service asynchronously
+
+    Returns:
+        AutogenService instance with agents created
+    """
+    service = get_autogen_service()
+    if not service.agents:
+        await service.create_agents()
+    return service

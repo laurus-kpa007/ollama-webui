@@ -23,7 +23,11 @@
 - **도구 테스트**: 각 도구를 직접 테스트할 수 있는 인터페이스
 - **세션별 도구 활성화**: 각 세션마다 다른 도구 조합 사용 가능
 
-### ✅ Phase 3: Autogen 멀티 에이전트 시스템
+### ✅ Phase 3: Autogen 멀티 에이전트 시스템 (v0.7.5)
+- **최신 AutoGen 0.7.5**: Microsoft AutoGen 최신 버전 사용
+  - Async/await 패턴으로 성능 향상
+  - RoundRobinGroupChat 및 SelectorGroupChat 팀 지원
+  - 개선된 에이전트 조정 및 메시지 처리
 - **6개의 전문 에이전트**:
   - **Researcher**: 연구 및 정보 수집
   - **Coder**: 코드 작성 및 디버깅
@@ -32,8 +36,8 @@
   - **Critic**: 품질 검토 및 피드백
   - **Planner**: 작업 계획 및 조율
 - **워크플로우**:
-  - Sequential: 에이전트가 순차적으로 작업
-  - Group Chat: 에이전트들이 협업하여 토론
+  - Sequential (RoundRobinGroupChat): 에이전트가 순차적으로 작업
+  - Group Chat (SelectorGroupChat): 에이전트들이 동적으로 협업하여 토론
   - Image Enhancement: 이미지 프롬프트 개선 전용 워크플로우
 - **에이전트 선택**: 작업에 필요한 에이전트만 선택하여 실행
 
@@ -47,6 +51,14 @@
 
 ## 🚀 시작하기
 
+### 0. 필수 요구사항
+
+- **Python 3.10 이상** (AutoGen 0.7.5 요구사항)
+- **Ollama** 설치 및 실행 중
+- (선택사항) **Redis** 세션 캐싱용
+
+> **참고**: AutoGen 0.7.5로 마이그레이션되었습니다. 자세한 내용은 [AUTOGEN_0.7.5_MIGRATION.md](AUTOGEN_0.7.5_MIGRATION.md)를 참조하세요.
+
 ### 1. 의존성 설치
 
 ```bash
@@ -55,6 +67,9 @@ pip install -r requirements.txt
 
 # PyTorch (선택사항 - GPU 지원)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# 시스템 검증
+python verify_system.py
 ```
 
 ### 2. 데이터베이스 초기화

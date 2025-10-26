@@ -12,8 +12,9 @@ redis==5.0.1
 # MCP Integration
 mcp==0.9.0
 
-# AutoGen (Multi-agent framework)
-pyautogen==0.2.25
+# AutoGen (Multi-agent framework) - Version 0.7.5
+autogen-agentchat==0.7.5
+autogen-ext[openai]==0.7.5
 
 # Utilities
 pydantic==2.5.0

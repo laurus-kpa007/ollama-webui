@@ -1,16 +1,33 @@
 """
-Autogen Routes - API endpoints for multi-agent system
+Autogen Routes - API endpoints for multi-agent system (Updated for AutoGen 0.7.5)
 """
 from flask import Blueprint, request, jsonify, current_app
-from services.autogen_service import get_autogen_service
+from services.autogen_service import get_autogen_service, initialize_autogen_service
+import asyncio
 
 autogen_bp = Blueprint('autogen', __name__, url_prefix='/api/autogen')
+
+
+def run_async(coro):
+    """Helper to run async functions in Flask routes"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
 
 @autogen_bp.route('/agents', methods=['GET'])
 def list_agents():
     """List available agents"""
     try:
         service = get_autogen_service()
+
+        # Initialize agents if not already done
+        if not service.agents:
+            run_async(service.create_agents())
+
         agents = service.get_available_agents()
 
         return jsonify({
@@ -21,6 +38,7 @@ def list_agents():
         return jsonify({
             'error': str(e)
         }), 500
+
 
 @autogen_bp.route('/task/sequential', methods=['POST'])
 def sequential_task():
@@ -40,9 +58,10 @@ def sequential_task():
 
         # Recreate agents with custom temperature if needed
         if temperature != 0.7:
-            service.create_agents(temperature)
+            run_async(service.create_agents(temperature))
 
-        result = service.sequential_task(task, agents)
+        # Run async task
+        result = run_async(service.sequential_task(task, agents))
 
         return jsonify(result)
 
@@ -52,6 +71,7 @@ def sequential_task():
             'task': task,
             'agents': agents
         }), 500
+
 
 @autogen_bp.route('/task/group', methods=['POST'])
 def group_task():
@@ -72,9 +92,10 @@ def group_task():
 
         # Recreate agents with custom temperature if needed
         if temperature != 0.7:
-            service.create_agents(temperature)
+            run_async(service.create_agents(temperature))
 
-        result = service.group_task(task, agents, max_round)
+        # Run async task
+        result = run_async(service.group_task(task, agents, max_round))
 
         return jsonify(result)
 
@@ -84,6 +105,7 @@ def group_task():
             'task': task,
             'agents': agents
         }), 500
+
 
 @autogen_bp.route('/image/enhance', methods=['POST'])
 def enhance_image_prompt():
@@ -98,7 +120,9 @@ def enhance_image_prompt():
 
     try:
         service = get_autogen_service()
-        result = service.image_generation_workflow(user_prompt)
+
+        # Run async workflow
+        result = run_async(service.image_generation_workflow(user_prompt))
 
         return jsonify(result)
 
@@ -107,6 +131,7 @@ def enhance_image_prompt():
             'error': str(e),
             'prompt': user_prompt
         }), 500
+
 
 @autogen_bp.route('/session/<session_id>/agents', methods=['GET', 'PATCH'])
 def manage_session_agents(session_id):
@@ -145,6 +170,7 @@ def manage_session_agents(session_id):
                 'error': 'Failed to update session agents'
             }), 500
 
+
 @autogen_bp.route('/workflows', methods=['GET'])
 def list_workflows():
     """List available agent workflows"""
@@ -152,14 +178,14 @@ def list_workflows():
         {
             'id': 'sequential',
             'name': 'Sequential Workflow',
-            'description': 'Agents work one after another',
+            'description': 'Agents work one after another in round-robin fashion',
             'recommended_agents': ['researcher', 'coder', 'critic'],
             'use_cases': ['Research and analysis', 'Code generation with review', 'Content creation pipeline']
         },
         {
             'id': 'group',
             'name': 'Group Chat',
-            'description': 'Agents collaborate in a discussion',
+            'description': 'Agents collaborate with dynamic speaker selection',
             'recommended_agents': ['researcher', 'coder', 'creative', 'critic'],
             'use_cases': ['Brainstorming', 'Complex problem solving', 'Multi-perspective analysis']
         },
@@ -176,6 +202,7 @@ def list_workflows():
         'workflows': workflows
     })
 
+
 @autogen_bp.route('/config', methods=['GET', 'POST'])
 def manage_config():
     """Get or update AutoGen configuration"""
@@ -185,7 +212,8 @@ def manage_config():
             'ollama_port': current_app.config_manager.get('ollama.port', 11434),
             'default_temperature': 0.7,
             'default_max_round': 12,
-            'enabled': current_app.config_manager.get('autogen.enabled', False)
+            'enabled': current_app.config_manager.get('autogen.enabled', False),
+            'version': '0.7.5'
         }
         return jsonify(config)
 
@@ -197,19 +225,24 @@ def manage_config():
 
         return jsonify({'success': True})
 
+
 @autogen_bp.route('/test', methods=['POST'])
 def test_agents():
     """Test agent system with sample task"""
     try:
         service = get_autogen_service()
 
+        # Initialize agents if needed
+        if not service.agents:
+            run_async(service.create_agents())
+
         # Simple test task
         test_task = "What are the benefits of using Python for web development? Keep the answer brief."
 
-        result = service.sequential_task(
+        result = run_async(service.sequential_task(
             test_task,
             ['researcher', 'critic']
-        )
+        ))
 
         return jsonify({
             'test': 'Sequential task test',
@@ -225,6 +258,7 @@ def test_agents():
             'error': str(e)
         }), 500
 
+
 @autogen_bp.route('/clear', methods=['POST'])
 def clear_conversation():
     """Clear conversation history"""
@@ -235,5 +269,23 @@ def clear_conversation():
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({
+            'error': str(e)
+        }), 500
+
+
+@autogen_bp.route('/initialize', methods=['POST'])
+def initialize():
+    """Initialize the AutoGen service and create agents"""
+    try:
+        service = run_async(initialize_autogen_service())
+
+        return jsonify({
+            'success': True,
+            'agents': service.get_available_agents(),
+            'version': '0.7.5'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
             'error': str(e)
         }), 500
