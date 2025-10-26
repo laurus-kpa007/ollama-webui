@@ -143,11 +143,11 @@ def manage_session_agents(session_id):
     if request.method == 'GET':
         # Get enabled agents
         session = manager.get_session(session_id)
-        if not session or not session.metadata:
+        if not session or not session.session_metadata:
             return jsonify({'error': 'Session not found'}), 404
 
         return jsonify({
-            'enabled_agents': session.metadata.enabled_agents or []
+            'enabled_agents': session.session_metadata.enabled_agents or []
         })
 
     elif request.method == 'PATCH':

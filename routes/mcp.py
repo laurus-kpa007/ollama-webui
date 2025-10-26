@@ -207,11 +207,11 @@ def manage_session_tools(session_id):
     if request.method == 'GET':
         # Get enabled tools
         session = manager.get_session(session_id)
-        if not session or not session.metadata:
+        if not session or not session.session_metadata:
             return jsonify({'error': 'Session not found'}), 404
 
         return jsonify({
-            'enabled_tools': session.metadata.enabled_tools or []
+            'enabled_tools': session.session_metadata.enabled_tools or []
         })
 
     elif request.method == 'PATCH':

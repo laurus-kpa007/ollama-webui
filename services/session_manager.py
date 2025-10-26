@@ -111,10 +111,10 @@ class SessionManager:
                 session.title = self._generate_title_from_content(content)
 
             # Update metadata
-            if session.metadata:
-                session.metadata.total_messages += 1
+            if session.session_metadata:
+                session.session_metadata.total_messages += 1
                 if tokens_used:
-                    session.metadata.total_tokens += tokens_used
+                    session.session_metadata.total_tokens += tokens_used
 
         db.session.commit()
 
@@ -374,10 +374,10 @@ class SessionManager:
             True if successful
         """
         session = self.get_session(session_id)
-        if not session or not session.metadata:
+        if not session or not session.session_metadata:
             return False
 
-        metadata = session.metadata
+        metadata = session.session_metadata
         for key, value in kwargs.items():
             if hasattr(metadata, key):
                 setattr(metadata, key, value)

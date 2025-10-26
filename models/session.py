@@ -20,8 +20,8 @@ class ChatSession(db.Model):
     # Relationships
     messages = db.relationship('Message', backref='session', lazy='dynamic',
                               cascade='all, delete-orphan', order_by='Message.created_at')
-    metadata = db.relationship('SessionMetadata', backref='session', uselist=False,
-                              cascade='all, delete-orphan')
+    session_metadata = db.relationship('SessionMetadata', backref='session', uselist=False,
+                                      cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<ChatSession {self.id} - {self.title}>'

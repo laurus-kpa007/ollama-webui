@@ -72,7 +72,7 @@ def get_session(session_id):
 
     result = session.to_dict()
     result['messages'] = [m.to_dict() for m in messages]
-    result['metadata'] = session.metadata.to_dict() if session.metadata else None
+    result['metadata'] = session.session_metadata.to_dict() if session.session_metadata else None
 
     return jsonify(result)
 
